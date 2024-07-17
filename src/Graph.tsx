@@ -15,9 +15,8 @@ interface IProps {
  * This interface acts as a wrapper for Typescript compiler.
  */
 interface PerspectiveViewerElement extends HTMLElement {
-    load: (table: any) => void;
+  load: (table: Table) => void;
 }
-
 
 /**
  * React component that renders Perspective based on data
@@ -31,43 +30,49 @@ class Graph extends Component<IProps, {}> {
     return React.createElement('perspective-viewer');
   }
 
-componentDidMount() {
-    const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+  componentDidMount() {
+    // Get element to attach the table from the DOM.
+    const elem: PerspectiveViewerElement = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
 
     const schema = {
-        stock: 'string',
-        top_ask_price: 'float',
-        timestamp: 'date'
+      stock: 'string',
+      top_ask_price: 'float',
+      top_bid_price: 'float',
+      timestamp: 'date',
     };
 
-    const table = window.perspective.worker().table(schema);
+    // Check if window.perspective and window.perspective.worker() are defined
+    if (window.perspective && window.perspective.worker()) {
+      this.table = window.perspective.worker().table(schema);
+    }
 
-    elem.load(table);
+    if (this.table) {
+      // Load the `table` in the `<perspective-viewer>` DOM reference.
+      elem.load(this.table);
 
-    elem.setAttribute('view', 'y_line');
-    elem.setAttribute('column-pivots', '["stock"]');
-    elem.setAttribute('row-pivots', '["timestamp"]');
-    elem.setAttribute('columns', '["top_ask_price"]');
-    elem.setAttribute('aggregates', `
-        {"stock": "distinct count",
+      // Add more Perspective configurations here.
+      elem.setAttribute('view', 'y_line');
+      elem.setAttribute('column-pivots', '["stock"]');
+      elem.setAttribute('row-pivots', '["timestamp"]');
+      elem.setAttribute('columns', '["top_ask_price", "top_bid_price"]');
+      elem.setAttribute('aggregates', `{
+        "stock": "distinct count",
         "top_ask_price": "avg",
-        "timestamp": "distinct count"}`);
-}
+        "top_bid_price": "avg",
+        "timestamp": "distinct count"
+      }`);
+    }
+  }
 
   componentDidUpdate() {
-    // Everytime the data props is updated, insert the data into Perspective table
     if (this.table) {
-      // As part of the task, you need to fix the way we update the data props to
-      // avoid inserting duplicated entries into Perspective table again.
-      this.table.update(this.props.data.map((el: any) => {
-        // Format the data from ServerRespond to the schema
-        return {
-          stock: el.stock,
-          top_ask_price: el.top_ask && el.top_ask.price || 0,
-          top_bid_price: el.top_bid && el.top_bid.price || 0,
-          timestamp: el.timestamp,
-        };
+      const tableData = this.props.data.map((el: ServerRespond) => ({
+        stock: el.stock,
+        top_ask_price: el.top_ask && el.top_ask.price || 0,
+        top_bid_price: el.top_bid && el.top_bid.price || 0,
+        timestamp: new Date(el.timestamp),
       }));
+      this.table.update(tableData as any);
     }
   }
 }
