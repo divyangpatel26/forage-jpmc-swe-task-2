@@ -253,6 +253,7 @@ ops = {
 }
 
 
+# Updated App class to handle StopIteration during initialization and data fetching
 class App(object):
     """ The trading game server application. """
 
@@ -262,7 +263,11 @@ class App(object):
         self._data_1 = order_book(read_csv(), self._book_1, 'ABC')
         self._data_2 = order_book(read_csv(), self._book_2, 'DEF')
         self._rt_start = datetime.now()
-        self._sim_start, _, _ = next(self._data_1)
+        try:
+            self._sim_start, _, _ = next(self._data_1)
+        except StopIteration:
+            print("Error: Data source exhausted during initialization.")
+            return
         self.read_10_first_lines()
 
     @property
@@ -284,9 +289,13 @@ class App(object):
                 yield t, bids, asks
 
     def read_10_first_lines(self):
-        for _ in iter(range(10)):
-            next(self._data_1)
-            next(self._data_2)
+        try:
+            for _ in iter(range(10)):
+                next(self._data_1)
+                next(self._data_2)
+        except StopIteration:
+            print("Error: Data source exhausted while reading initial lines.")
+            self.__init__()
 
     @route('/query')
     def handle_query(self, x):
@@ -296,11 +305,15 @@ class App(object):
         try:
             t1, bids1, asks1 = next(self._current_book_1)
             t2, bids2, asks2 = next(self._current_book_2)
-        except Exception as e:
-            print("error getting stocks...reinitalizing app")
+        except StopIteration:
+            print("Error: Data source exhausted during query handling. Reinitializing...")
             self.__init__()
-            t1, bids1, asks1 = next(self._current_book_1)
-            t2, bids2, asks2 = next(self._current_book_2)
+            try:
+                t1, bids1, asks1 = next(self._current_book_1)
+                t2, bids2, asks2 = next(self._current_book_2)
+            except StopIteration:
+                return []
+
         t = t1 if t1 > t2 else t2
         print('Query received @ t%s' % t)
         return [{
